@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/mvp.css">
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        
+        const socket = io({ path: "/socket.io" });
+
+        const quitChatRoom = document.getElementById("quitChatRoom");
+
+        const chatForm = document.getElementById("chat_form");
+        const chatInput = document.getElementById("chat_input");
+        const chatFormSpecific = document.getElementById("chat_form_specific");
+        const chatInputSpecific =document.getElementById("chat_input_specific");
+
+        const nicknameForm = document.getElementById("nickname_form");
+        const nicknameInput = document.getElementById("nickname_input");
+
+        const messages = document.getElementById("messages");
+        const chatHistoryButton = document.getElementById("chatHistoryAll")
+        const chatSearchedHistoryForm = document.getElementById("chatSearchedHistoryAll")
+        const chatDisplay = document.getElementById('chatDisplay');
+
+        const makeChatRoomForm = document.getElementById('makeChatRoom_form')
+        const makeChatRoomInput = document.getElementById('makeChatRoom_input')
+        const quitChatRoomForm = document.getElementById('quitChatroom_form')
+        const quitChatRoomInput = document.getElementById('quitChatroom_input')
+        const chatRoomList = document.getElementById('chatRoomList');
+
+        const room_personnel = document.getElementById("room_personnel");
+        const chatRoomNamePositionDiv = document.getElementById('chatRoomNamePosition');
+
+        var currentChatRoomNames = [];
+
+                    // display user's current room list 
+                    function displayMyChatRoom(){
+                        console.log("displayMyChatRoom(), ChatRoomList => ", currentChatRoomNames);
+                        
+                        // chatRoomList의 자식 요소들을 모두 제거
+                        while (chatRoomList.firstChild) {
+                            chatRoomList.removeChild(chatRoomList.firstChild);
+                        }
+                        
+                        if(currentChatRoomNames.length == 0){
+                            const roomOneLi = document.createElement('h2');
+                            roomOneLi.innerText = '채팅방이 없습니다 만들어주세요🤫'
+                            chatRoomList.appendChild(roomOneLi);
+                        }
+
+                        currentChatRoomNames.forEach( room => {
+                            const roomOneLi = document.createElement('li');
+                            roomOneLi.innerText = room;
+                            
+                            const roomOneButton = document.createElement('button');
+                            roomOneButton.innerText = '입장하기';
+                            roomOneButton.addEventListener('click', function(){
+                                socket.emit("enter_room", room, displayCurrentChatRoom);
+                            })
+                            roomOneLi.append(roomOneButton);
+                            
+                            chatRoomList.appendChild(roomOneLi);    
+                        }) 
+                    }
+
+                    // display user's current room to title
+                    function displayCurrentChatRoom(roomName){
+
+                            if(roomName == undefined){
+                                var flag = true;
+                            }
+
+                            console.log("displayMyChatRoom(), currentChatRoomName => ", roomName);
+
+                            const existingH1 = document.querySelector('h1');
+                            if (existingH1) {
+                                existingH1.remove();
+                            }
+                            const newH1 = document.createElement('h1');
+                            if(!flag){
+                                newH1.innerText = `[${roomName}] 채팅방이에용`;
+                            }else{
+                                newH1.innerText = " 쿠버맵티스 공용 서버에용";
+                            }
+                            chatRoomNamePositionDiv.append(newH1); 
+
+                            console.log("chat Room created");
+                            makeChatRoomInput.value='';
+                    }
+
+                    // display message on chatroom
+                    function messageDisplay(content){
+                        const item = document.createElement("li");
+                        item.textContent = content;
+                        messages.appendChild(item);
+                    }
+
+        // connect to socket.server
+        socket.on("connect", (e) => {
+          console.log("Connected to server");
+
+          // 서버에서 받아온 rooms 들을 프론트에 전달함
+          function initSetting(currentChatRoomAndPersonnel){
+            console.log("being initial setting")
+            currentChatRoomNames = currentChatRoomAndPersonnel.publicRooms;
+            displayMyChatRoom();
+
+            currentChatRoomPersonnel = currentChatRoomAndPersonnel.Personnel.length;
+            room_personnel.innerHTML = '';
+            room_personnel.append(`서버 접속 인원  (${currentChatRoomPersonnel})`);
+            
+            currentChatRoomAndPersonnel.Personnel.forEach((member)=>{
+                var room_person = document.createElement("li");
+                var textNode = document.createTextNode(member[0]);
+                room_person.append(textNode);
+                room_personnel.appendChild(room_person);
+            })
+          }
+
+          socket.emit("init_chatRoom", initSetting)
+        });
+
+        // show entire room when user 
+
+        // open or join new chat Room and enter in
+        makeChatRoomForm.addEventListener("submit", (e)=>{
+            e.preventDefault();
+     
+            // 입장한 방이름 불러옴
+            socket.on("room_name", (rooms)=>{
+                currentChatRoomNames = rooms;
+            })
+
+            function showRoom(roomName){
+                displayMyChatRoom();
+                displayCurrentChatRoom(roomName);
+            }
+
+            socket.emit("enter_room", makeChatRoomInput.value, showRoom);
+      
+            // 내 채팅방 목록 표시
+
+            console.log("socket.rooms => ", socket.rooms);
+            console.log("socket.sids => ", socket.sids);
+        })
+
+        // quit your chatRoom
+        quitChatRoom.addEventListener("click",(e)=>{
+            e.preventDefault();
+
+            // 퇴장후 남은 방이름 불러옴
+            socket.on("room_name", (rooms)=>{
+                currentChatRoomName = rooms;
+            })
+
+            // 채팅방 나가면 채팅방 목록에서 삭제, 유저가 현재 채팅중인 방 제목을 기본값으로 변경
+            function showRoom(roomName){
+                displayMyChatRoom();
+                displayCurrentChatRoom(roomName);
+            }
+
+            socket.emit('leave_room', currentChatRoomNames.pop(), showRoom);
+        })
+
+        // show chat room member List and its personnel
+        socket.on("room_info", (roomInfo)=>{
+                console.log("roomInfo.size", roomInfo.personnel);
+                console.log("roomInfo.rooms", roomInfo.members);
+                console.log("roominfo.sids", roomInfo.sids);
+
+                room_personnel.innerHTML = '';
+                room_personnel.append(`채팅 참여 인원  (${roomInfo.personnel})`);
+                
+                roomInfo.members.forEach((member)=>{
+                    var room_person = document.createElement("li");
+                    var textNode = document.createTextNode(member);
+                    room_person.append(textNode);
+                    room_personnel.appendChild(room_person);
+                })
+            })
+
+        // 채팅방 생성시 서버에서 보내는 메시지 수신
+        socket.on("welcome_event", (msg) => { 
+            console.log(msg);
+
+            messageDisplay(msg);
+        })
+    
+        // receive a broadcasting message from socket server
+        socket.on("msg", (chat) => {
+          console.log(chat);
+
+          messageDisplay(chat);
+          //window.scrollTo(0, document.body.scrollHeight) //최하단으로 스크롤;
+        });
+
+        // receive a specific chat from socket server
+        socket.on("specific_chat", (chat)=>{
+            console.log(chat);
+
+            //const userSpecificChat = `🤫(채팅방에만) ${chat.nickname} : ${chat.chatMsg} (보낸시간 : ${chat.time}) socket.id => ${chat['socket.id']} socket.rooms => ${chat['socket.rooms']})`;
+            const userSpecificChat = `🤫(채팅방에만) ${chat.nickname} : ${chat.chatMsg} (보낸시간 : ${chat.time})`
+            messageDisplay(userSpecificChat);
+        })
+
+        // receive a chat from socket server
+        socket.on("chat", (chat) => {
+            console.log(chat);
+
+            //const userChat = ` 📢(모두에게) ${chat.nickname} : ${chat.chatMsg} (보낸시간 : ${chat.time}) socket.id => ${chat['socket.id']} socket.rooms => ${chat['socket.rooms']})`;
+            const userChat = ` 📢(모두에게) ${chat.nickname} : ${chat.chatMsg} (보낸시간 : ${chat.time})`
+            messageDisplay(userChat);
+            //window.scrollTo(0, document.body.scrollHeight); //최하단으로 스크롤
+        });
+
+        // send a specific chat to socket server
+        chatFormSpecific.addEventListener("submit", (e) => {
+            e.preventDefault();
+            console.log(`채팅방 [${currentChatRoomNames}] 에 메세지 전송중`);
+
+            if (chatInputSpecific.value) {
+            socket.emit("msg_toRoom", chatInputSpecific.value, currentChatRoomNames);
+            chatInputSpecific.value = "";
+            }
+        });
+
+        // send a chat to socket server
+        chatForm.addEventListener("submit", (e) => {
+            e.preventDefault();
+
+            if (chatInput.value) {
+            socket.emit("msg", chatInput.value);
+            chatInput.value = "";
+            }
+        });
+
+        // change your nickname            
+        nicknameForm.addEventListener("submit", (e) => {
+            e.preventDefault();
+
+            if (nicknameInput) {
+             socket.emit("nickname", nicknameInput.value);
+            }
+        });
+  
+        // bring chat history
+        chatHistoryButton.addEventListener('click',  async function() {
+           
+            try {
+                // 서버에 요청을 보내 채팅 기록을 가져옴
+                const response = await fetch('/api/chatSearch');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+
+                const text = await response.text(); // Read response as text
+                const chatHistory = text ? JSON.parse(text) : []; // Parse JSON if not empty
+
+                // 채팅 기록을 콘솔에 출력
+                console.log("Chat History:", chatHistory);
+
+                // 채팅 기록을 페이지에 표시
+                let chatHistoryHTML = '';
+                chatHistory.forEach( (chat) => {
+                    chatHistoryHTML += `${chat.nickname} : ${chat.chatMsg} (${chat.time}) <br/>`;
+                })
+                chatDisplay.innerHTML = chatHistoryHTML;
+                
+                window.scrollTo(0, document.body.scrollHeight); //최하단으로 스크롤
+            } catch (error) {
+                console.error("Error fetching chat history:", error);
+            }
+        });
+
+        // bring searched chat history
+        chatSearchedHistoryForm.addEventListener('submit',  async function(e) {
+
+            e.preventDefault();
+
+            const searchTerm = document.getElementById('search-term').value;
+            const searchCondition = document.getElementById('search-Condition').value;    
+            
+            const url = new URL('/api/chatSearch', window.location.origin);
+            url.searchParams.append('searchTerm', searchTerm);
+            url.searchParams.append('searchCondition', searchCondition);
+
+            try {
+                // 서버에 요청을 보내 채팅 기록을 가져옴
+
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+
+                const text = await response.text(); // Read response as text
+                const chatSearchedHistory = text ? JSON.parse(text) : []; // Parse JSON if not empty
+
+                // 채팅 기록을 콘솔에 출력
+                console.log("Chat searched History:", chatSearchedHistory);
+
+                // 채팅 기록을 페이지에 표시
+                let chatHistoryHTML = '';
+                
+                chatSearchedHistory.forEach( (chat) => {
+                    chatHistoryHTML += `${chat.nickname} : ${chat.chatMsg} (${chat.time}) <br/>`;
+                })
+                chatDisplay.innerHTML = chatHistoryHTML;
+                
+                window.scrollTo(0, document.body.scrollHeight); //최하단으로 스크롤
+            } catch (error) {
+                console.error("Error fetching searched chat history:", error);
+            }
+        });
+    })
+
+    </script>
+
+  </head>
+  <body>
+    <!-- <h3>chat-server-nodejs에서 뿌리는 chat.html 에옹 (프론트)</h3> -->
+    
+    <ul id="chatRoomList">
+        <li> 예비방1 <button>입장하기</button> // 공사중임 접근 ㄴㄴ </li>
+        <li> 예비방2 <button>입장하기</button> // 공사중임 접근 ㄴㄴ</li>
+    </ul>
+
+    <form id="makeChatRoom_form">
+        <input id="makeChatRoom_input"/><button>
+            새로운 채팅방 입장하기 
+        </button type="submit">
+    </form>
+
+    <form id="quitChatRoom_form">
+        <button id="quitChatRoom">
+            채팅방 나가기(공사중)
+        </button>
+    </form>
+
+    <br />
+
+    <div id="chatRoomNamePosition">
+        <h1> &nbsp; 쿠버맵티스 공용 서버에용</h1>
+    </div>
+
+    <br />
+
+    <ul id="room_personnel">채팅 참여 인원 </ul>
+
+    <br />
+
+    <ul id="messages">채팅 내용</ul>
+    <form id="chat_form_specific" action="">
+        <input id="chat_input_specific" autocomplete="off" /><button>Send (접속중 채팅방)</button>
+    </form>
+    <form id="chat_form" action="">
+      <input id="chat_input" autocomplete="off" /><button>Send (전체 채팅방)</button>
+    </form>
+    <form id="nickname_form" action="">
+        <input id="nickname_input" autocomplete="off" /><button>
+          닉네임 변경
+        </button>
+    </form>
+
+    <br />
+    <br />
+    -----------------------------
+    <h3>개발 history</h3>
+    24.5.17(금) - 1:1 채팅기능 구현 (완료) <br/>
+    24.5.18(토) - 닉네임 변경기능 (완료) <br/>
+    24.5.18(토) - 채팅방 인원 수 표시, 최초 채팅방 접속일자 표시 (완료) <br/>
+    24.5.19(일) - 채팅방 접속자 표시, 채팅별 전송일자 표시 (완료) <br/>
+    24.5.20(월) - 채팅내용 몽고DB 저장하고 전체 채팅 조회하기 (완료) <br/>
+    24.5.22(수) - 특정 닉네임/날짜/채팅내용별로 채팅메세지 선택 조회하기 (완료)<br/>
+    24.5.25(토) - 채팅방 생성 (진행완료) <br/>
+    24.5.27(월) - 채팅방 나가기 (진행완료) <br/>
+    24.5.28(화) - 다른 채팅방 입장 및 기존 채팅방 재입장 (진행완료) <br/>
+    24.5.28(화) - 서버에 존재하는 전체 채팅방 표시 (진행완료) <br/>
+
+    <br/>
+    <strong>해결중인 버그임돠</strong>
+    <br/><br/>
+    
+    채팅방 나가기 -> 나가기는 됨. 근데 해당 채팅방 다른유저 채팅참여인원, 참여목록에는 그대로 남는 버그.  <br/>
+    채팅방 입장 -> 같은 방에 입장하면 계속 입장메세지 뜨는 버그(나갈때는 해결)
+    채팅방 입장 -> 새로운 사람들어올때는 기존 유저 화면에선 반영안되는 버그  <br/>
+    채팅방 변경 -> 다른 방 들어갈 때 기존의 방은 나가기 안되는 버그 <br/>
+
+    <br/>
+
+    <strong>개발예정</strong>
+    <br/>
+
+    (개념, 코드 정리하기 + 어댑터공부)<br/><br/>
+    24.5.29(목) - 채팅방 CRUD 하기 (스프링? 몽고?) <br/>
+    <li> Create : 채팅방 만들면 DB에 남기기 </li>
+    <li> Read   : 현재 존재하는 채팅방 찾아서 들어가기 </li>
+    <li> Update : 채팅방 이름 바꾸기</li>
+    <li> Delete : 채팅방 터뜨리거나 인원이 0명이면 자동 소멸되도록</li> <br/>
+
+    24.5.29(목) - 채팅삭제 <br/> 
+    24.5.29(목) - 채팅에 이미지, 동영상 올리기 <br/>
+    24.5.29(목) - 채팅읽음 <br/>
+    24.5.29(목) - 리액트전환 <br/>
+
+    <br/>
+
+    <form id="chatSearchedHistoryAll" >
+
+        <label for="search-term">Search:</label>
+        <input type="text" id="search-term" name="searchTerm" placeholder="검색어를 입력하셈">
+        
+        <label for="search-Condition">검색조건:</label>
+        <select id="search-Condition" name="searchCondition">
+            <!-- <option value="">선택</option> -->
+            <option value="chatNickname">닉네임</option>
+            <option value="chatDate">채팅날짜</option>
+            <option value="chatMsg">내용</option>
+        </select>
+        <button  type="submit">1) 검색하여 채팅내용 불러오기 (클릭) </button>
+        
+        <!-- /api/chatTest?search-term="name에 입력한 것">&category="option value로 선택한 것" -->
+
+        <button id="chatHistoryAll">
+            2) 채팅내용 전체 불러오기 (클릭)
+        </button>
+
+    </form>
+
+    
+    <pre id="chatDisplay"></pre>
+      
+  </body>
+</html>
