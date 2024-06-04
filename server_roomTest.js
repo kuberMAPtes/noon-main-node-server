@@ -2,6 +2,7 @@
 //npm install nodemon (안하면 node server.js 로 실행)
 //npm install express 
 //npm install socket.io
+const axios = require('axios');
 
 // 몽고 DB 연결
 var mongoose = require('mongoose');
@@ -30,6 +31,10 @@ mongoose.connection.close();
 const express = require('express');
 const app = express();
 
+// front 서버에서 들어오는 요청을 허용
+const cors = require('cors');
+app.use(cors());
+
 const port = 8081;
 const server = app.listen(port, function() {
     console.log('Listening on '+port);
@@ -56,8 +61,8 @@ io.on('connection', async function (socket) {
             adapter : { sids, rooms } 
         } = socket;
 
-        console.log("-------------------------------------------------- sids",sids)
-        console.log("-------------------------------------------------- rooms",rooms)
+//        console.log("-------------------------------------------------- sids",sids)
+//        console.log("-------------------------------------------------- rooms",rooms)
 
         // 현재 소켓에서 publicRooms 조회
         const publicRooms = [];
@@ -67,21 +72,31 @@ io.on('connection', async function (socket) {
             }
         })
 
-        console.log("-------------------------------------------------- publicRooms", publicRooms)
+//       console.log("-------------------------------------------------- publicRooms", publicRooms)
 
         return publicRooms;
     }
 
-    // show initial chatRoom when user join in 
-    socket.on("init_chatRoom", (done) => {
+    // show a initial chatRoom when user join in 
+    socket.on("init_chatRoom", (roomName, done) => {
+
+        // 입장한 채팅룸
+        console.log("🌹roomName", roomName);
+
+        // 채팅룸을 client 에 표시
+        socket.join(roomName);
+        done(publicRooms());
+
+        /* socket 을 기반 아닌 스프링 서버 데이터 기반으로 채팅방 만드니 삭제
         const currentChatRoomAndPersonnel = {
             publicRooms : publicRooms(),
             Personnel : Array.from(socket.adapter.sids)
         }
 
-        console.log("currentChatRoomAndPersonnel", currentChatRoomAndPersonnel)
-
-        done(currentChatRoomAndPersonnel);
+        if(currentChatRoomAndPersonnel.publicRooms.length !=0){
+            console.log("currentChatRoomAndPersonnel", currentChatRoomAndPersonnel)
+        }
+        */
     })
 
     // open new chat Room
@@ -89,23 +104,47 @@ io.on('connection', async function (socket) {
         console.log('🎴 입장한 roomName', roomName);
         console.log('🎴 해당 socket 이 입장한 rooms 목록', socket.rooms); 
 
-        socket.join(roomName);
-        io.emit("room_name", publicRooms());
-        done(roomName);
+        // search current chatroom from api server
+        axios.get('http://192.168.0.40:8080/chatroom/getChatrooms')
+        .then(response => {
+ 
+            // 받아온 채팅방 목록에서 선택한 채팅방이 있는지 확인
+            const chatrooms = response.data;
 
-        // show entire chat room member and number
-        const roomInfo = {
-            personnel: socket.adapter.rooms.get(roomName).size, 
-            members: Array.from(socket.adapter.rooms.get(roomName)),
-            sids: Array.from(socket.adapter.sids)
-        }
-        console.log('🎴 해당 rooms 에 대한 정보 roomInfo',roomInfo);
-        
-        socket.emit('room_info', roomInfo);
+            // 서버에 존재하는 채팅룸들
+            console.log("--- mySQL 저장된 채팅룸 목록---")
+            chatrooms.forEach(room=>console.log(room.chatroomName));
+            console.log("-----------------------------")
 
-        if(roomName !== null){
-            io.to(roomName).to(socket.id).emit("welcome_event",`${socket.id} 님이 room ${roomName}에 입장하셨습니다. (입장시간 : ${socket.handshake.time})`);
-        }
+            const existingRoom = chatrooms.find(room => room.chatroomName === roomName);
+
+            if(existingRoom){
+                // 채팅방이 존재하면 입장
+                socket.join(roomName);
+                io.emit("room_name", publicRooms());
+                done(roomName);
+
+                // show entire chat room member and number
+                const roomInfo = {
+                    personnel: socket.adapter.rooms.get(roomName).size, 
+                    members: Array.from(socket.adapter.rooms.get(roomName)),
+                    sids: Array.from(socket.adapter.sids)
+                }
+//              console.log('🎴 해당 rooms 에 대한 정보 roomInfo',roomInfo);
+                
+                socket.emit('room_info', roomInfo);
+
+                if(roomName !== null){
+                    io.to(roomName).to(socket.id).emit("welcome_event",`${socket.id} 님이 room ${roomName}에 입장하셨습니다. (입장시간 : ${socket.handshake.time})`);
+                }
+            } else {
+                // 채팅방이 존재하지 않으면 에러 처리
+                console.error(`Room {${roomName}} does not exist.`);
+            }
+        })
+        .catch(error => {
+            console.error('There was an error fetching the chat rooms!', error);
+        });
     })
 
     // quit chat Room
@@ -170,6 +209,7 @@ io.on('connection', async function (socket) {
         console.log(socket.id,': ', chatMsg);
         // broadcasting a message to everyone except for the sender
         const chat = {
+            chatroomName : '여기에 채팅방저장',
             'socket.rooms' : Array.from(socket.adapter.rooms),
             'socket.id' : socket.id,
             nickname : nickname,
@@ -187,10 +227,11 @@ io.on('connection', async function (socket) {
     });
 
     // receive a spsecific msg and show only to its room
-    socket.on("msg_toRoom", (chatMsg,room) => {
+    socket.on("msg_toRoom", async (chatMsg,room) => {
         console.log("recevie specific msg, room => ", chatMsg, room);
 
         const specific_chat = {
+            chatroomName : room,
             'socket.rooms' : Array.from(socket.adapter.rooms),
             'socket.sids' : Array.from(socket.adapter.sids),
             'socket.id' : socket.id,
@@ -199,6 +240,7 @@ io.on('connection', async function (socket) {
             time : new Date().toString()
         }
 
+        await mongooseFunctionSJ.mongooseWrite(modelChat, specific_chat);
         io.to(room).emit("specific_chat", specific_chat);
         //done(specific_msg);
     })

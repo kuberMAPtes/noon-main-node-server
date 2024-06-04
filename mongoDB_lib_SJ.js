@@ -4,8 +4,10 @@ var mongoose = require('mongoose');
 async function mongooseSetup(){
 
     // 2. testDB 세팅
-    mongoose.connect('mongodb://localhost:27017/testDB');
-
+    mongoose.connect('mongodb://0.0.0.0:27017/sss')
+    .then(() => console.log('MongoDB connected'))
+    .catch(err => console.log('MongoDB connection error:', err));
+    
     // 3. 연결된 testDB 사용
     var db = mongoose.connection;
 
@@ -20,6 +22,7 @@ async function mongooseSetup(){
 
     // 6. Schema 생성
     var chat = mongoose.Schema({
+        chatroomName : 'string',
         nickname : 'string',
         'socket.id' : 'string',
         chatMsg : 'string',
@@ -65,7 +68,7 @@ async function mongooseWrite(ModelChat,chat){
     try {
         const newChat = new ModelChat(chat);
         await newChat.save();
-        console.log('Chat created:', newChat);
+        console.log('Chat stored to mongoDB:', newChat);
       } catch (err) {
         console.error(err);
       }   
@@ -79,7 +82,7 @@ async function mongooseUpdate(ModelChat){
           { age: 31 },
           { new: true } // 업데이트된 문서를 반환하도록 설정
         );
-        console.log('Chat updated:', updatedChat);
+        console.log('Chat updated to mongoDB:', updatedChat);
       } catch (err) {
         console.error(err);
       }
@@ -89,7 +92,7 @@ async function mongooseDelete(ModelChat){
     // 12. 데이터 삭제
     try {
         const deletedChat = await ModelChat.findOneAndDelete({ name: 'Alice' });
-        console.log('Chat deleted:', deletedChat);
+        console.log('Chat deleted from mongoDB:', deletedChat);
       } catch (err) {
         console.error(err);
       }
