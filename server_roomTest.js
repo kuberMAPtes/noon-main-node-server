@@ -4,7 +4,7 @@
 //npm install socket.io
 const axios = require('axios');
 
-// 몽고 DB 연결
+// 몽고 DB 연결!
 var mongoose = require('mongoose');
 const mongooseFunctionSJ = require('./mongoDB_lib_SJ');
 
