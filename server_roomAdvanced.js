@@ -105,7 +105,7 @@ io.on('connection', async function (socket) {
         console.log('🎴 해당 socket 이 입장한 rooms 목록', socket.rooms); 
 
         // search current chatroom from api server
-        axios.get('http://192.168.0.40:8080/chatroom/getChatrooms')
+        axios.get('http://localhost:8080/chatroom/getMyChatrooms?memberId=24241')
         .then(response => {
  
             // 받아온 채팅방 목록에서 선택한 채팅방이 있는지 확인
