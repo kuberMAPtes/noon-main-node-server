@@ -4,7 +4,12 @@ var mongoose = require('mongoose');
 async function mongooseSetup(){
 
     // 2. testDB 세팅
-    mongoose.connect('mongodb://0.0.0.0:27017/sss')
+    const username = 'scott';
+    const password = 'tiger6609!';
+    const encodedPassword = encodeURIComponent(password);
+    const dbURI = `mongodb://${username}:${encodedPassword}@localhost:27017/sss`;
+
+    mongoose.connect(dbURI)
     .then(() => console.log('MongoDB connected'))
     .catch(err => console.log('MongoDB connection error:', err));
     
