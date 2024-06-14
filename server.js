@@ -4,7 +4,11 @@
 //npm install socket.io
 const axios = require('axios');
 
-// 몽고 DB 연결!
+
+/**
+ * 몽고 DB 연결!
+*/
+
 var mongoose = require('mongoose');
 const mongooseFunctionSJ = require('./mongoDB_lib_SJ');
 
@@ -27,28 +31,78 @@ await mongooseFunctionSJ.mongooseDelete(modelChat, chat);
 mongoose.connection.close();
 }
 
-// 웹서버 개설
+
+/*
+ * 웹서버 개설
+*/
+
 const express = require('express');
 const app = express();
 
 // front 서버에서 들어오는 요청을 허용
-const cors = require('cors');
+const cors = require('cors'); 
 app.use(cors());
 
 const port = 8081;
 const server = app.listen(port, function() {
-    console.log('Listening on '+port);
+    console.log('🛫 Express server Listening on '+port);
 });
 
-// socketIO 개설(?)
+
+/*
+ * 웹서버 위에 socket.io 얹기 (?)
+*/
+
 const SocketIO = require('socket.io');
 const io = SocketIO(server, {
     // node 서버와 웹서버가 다를 경우 cors 문제 생김
     cors: {
-        origin: "http://localhost:3000",
+        origin: "*",
     },
     path: '/socket.io'
 });
+
+
+
+/*
+ * 카프카
+*/
+
+const { Kafka } = require('kafkajs')
+
+const kafka = new Kafka({ // Kafka 클라이언트 설정중
+    clientId: 'my-app',
+    brokers: ['localhost:9092'] // Kafka 브로커의 주소
+})
+
+const producer = kafka.producer()
+
+const initKafka = async() => { // 프로듀서를 생성하고 Kafka 브로커와 연결
+    await producer.connect()
+}
+
+app.get('/events/:event', async(req, res) => { 
+
+    await producer.send({ // 요청이 들어오면 해당 이벤트를 아래 토픽에 전송
+        topic: 'quickstart-events',
+        messages: [
+            { value: req.params.event },
+        ]
+    })
+    res. send('successfully stored event @kafka : ' + req.params.event + '\n')
+  })
+  
+app.listen(port+1, () => { // 서버 시작
+console.log(`🛩️ kafka app listening on port ${port+1}`)
+})
+
+initKafka();
+
+
+
+/*
+ * 채팅 시작
+*/
 
 io.on('connection', async function (socket) {
 
