@@ -27,6 +27,7 @@ async function mongooseSetup(){
 
     // 6. Schema 생성
     var chat = mongoose.Schema({
+        chatroomID : 'string',
         chatroomName : 'string',
         nickname : 'string',
         'socket.id' : 'string',
@@ -43,7 +44,7 @@ async function mongooseSetup(){
 async function mongooseReadOne(ModelChat, search){
     // 9. 특정 데이터 조회
     try {
-        console.log("디버깅 -> 검색조건", search);
+      console.log("🦐 mongooseReadOne 실행 , 검색조건 => ", search);
         const searchedChat = await ModelChat.findOne(search);
         console.log('Chat found:', searchedChat);
 
@@ -54,10 +55,10 @@ async function mongooseReadOne(ModelChat, search){
         }
 }
 
-async function mongooseReadAll(ModelChat, search){
+async function mongooseReadMany(ModelChat, search){
     // 10. 전체 데이터 조회
     try {
-        console.log("디버깅 -> mongooseReadAll 검색조건", search);
+        console.log("🦐 mongooseReadMany 실행 , 검색조건 => ", search);
         const searchedChats = await ModelChat.find(search);
         console.log('Chats found number:', searchedChats.length);
 
@@ -71,6 +72,7 @@ async function mongooseReadAll(ModelChat, search){
 async function mongooseWrite(ModelChat,chat){
     // 8. 데이터 저장
     try {
+        console.log("🦐 mongooseWrite 실행 , 작성내용 => ", chat);
         const newChat = new ModelChat(chat);
         await newChat.save();
         console.log('Chat stored to mongoDB:', newChat);
@@ -82,6 +84,7 @@ async function mongooseWrite(ModelChat,chat){
 async function mongooseUpdate(ModelChat){
     // 11. 데이터 수정
     try {
+        console.log("🦐 mongooseUpdate 실행");
         const updatedChat = await ModelChat.findOneAndUpdate(
           { name: 'Alice' },
           { age: 31 },
@@ -96,6 +99,7 @@ async function mongooseUpdate(ModelChat){
 async function mongooseDelete(ModelChat){
     // 12. 데이터 삭제
     try {
+        console.log("🦐 mongooseDelete 실행");
         const deletedChat = await ModelChat.findOneAndDelete({ name: 'Alice' });
         console.log('Chat deleted from mongoDB:', deletedChat);
       } catch (err) {
@@ -108,7 +112,7 @@ module.exports = {
     mongooseSetup,
     mongooseWrite,
     mongooseReadOne,
-    mongooseReadAll,
+    mongooseReadMany,
     mongooseUpdate,
     mongooseDelete
 };

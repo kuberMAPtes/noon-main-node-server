@@ -17,14 +17,14 @@ async function initialSetting(){
     modelChat = await mongooseFunctionSJ.mongooseSetup();
 }
 
-initialSetting();
+initialSetting();   
 
 // *** 복붙하기 위한 임시 코드 ***
 async function temp(){
 
 await mongooseFunctionSJ.mongooseWrite(modelChat, chat);
 await mongooseFunctionSJ.mongooseReadOne(modelChat, chat);
-await mongooseFunctionSJ.mongooseReadAll(modelChat);
+await mongooseFunctionSJ.mongooseReadMany(modelChat);
 await mongooseFunctionSJ.mongooseUpdate(modelChat, chat);
 await mongooseFunctionSJ.mongooseDelete(modelChat, chat);
 
@@ -104,9 +104,41 @@ initKafka();
  * 채팅 시작
 */
 
+// 연결된 소켓과 로그인 유저 아이디 간의 매핑을 저장할 객체
+const socketToMember = {};
+
 io.on('connection', async function (socket) {
 
     console.log(socket.id, ' connected...');
+
+    // mapping memberId to socketId
+    socket.on('mapping_memberID_to_socketID', (memberID, done) => {
+        // 소켓 ID와 사용자 이름 매핑 저장
+        socketToMember[socket.id] = memberID;
+        
+        done(`${memberID} 가 ${socket.id} 에 매핑됨`)
+    })
+
+    // get user List from joined socket room
+    function getRoomMembersID(roomName){
+        console.log(`\n🦐 getRoomMembersID 실행, 채팅방 ${roomName} 을 조회중`)
+
+        const socketsInRoom = io.sockets.adapter.rooms.get(roomName); // roomName 이란 소켓룸
+
+        if (!socketsInRoom) return [];
+
+        const membersID = [];
+
+        // socketId 들을 넣으면 실제 사용자 아이디로 매핑해서 돌려줌
+        socketsInRoom.forEach(socketId => {
+            const username = socketToMember[socketId];
+            if (username) {
+                membersID.push(username);
+            }
+        });
+
+        return membersID;        
+    }
 
     // return public room names by comparing sids and rooms
     function publicRooms(){
@@ -132,27 +164,53 @@ io.on('connection', async function (socket) {
     }
 
     // show a initial chatRoom when user join in 
-    socket.on("init_chatRoom", (roomName, done) => {
-
+    socket.on("init_chatRoom", async (roomInfo, done) => {
+        console.log("\n\n\n 🐬 EVENT : init_chatRoom ")
         // 입장한 채팅룸
-        console.log("🌹roomName", roomName);
+        console.log("🌹클라이언트가 요청한 roomInfo", roomInfo);
 
         // 채팅룸을 client 에 표시
-        socket.join(roomName);
-        done(publicRooms());
+        socket.join(roomInfo.chatroomName);
+        done(roomInfo.chatroomName);
+        console.log(`ㅡ ${roomInfo.chatroomName} 에 입장... 이전 채팅내역 조회하자 ...`);
 
         // 채팅내역 복구
-        const messageHistory = mongooseFunctionSJ.mongooseReadAll(modelChat, '김대민')
-        socket.to(roomName).emit("msg_history", messageHistory);
+        const searchCondition = { chatroomID: roomInfo.chatroomID ? roomInfo.chatroomID : '없어시방' }
+        const messageHistory = await mongooseFunctionSJ.mongooseReadMany(modelChat, searchCondition)
+        if(messageHistory.length !== 0){
+            console.log("채팅 불러온 개수는 ", messageHistory.length);
+        }
+
+        console.log(`ㅡ ${messageHistory.length} 개의 이전 채팅을 클라이언트에 주자`)
+        socket.to(roomInfo.chatroomName).emit("msg_history", messageHistory);
 
     })
 
-    // open new chat Room and return room's 실시간접속 information 
-    socket.on("enter_room", async (roomName,done)=>{
-        console.log('🎴 입장한 roomName', roomName);
-        console.log('🎴 해당 socket 이 입장한 rooms 목록', socket.rooms); 
+    // open new chat Room and return room's 실시간접속자 information 
+    socket.on("enter_room", async (socketRoom,done)=>{
+        console.log("\n\n\n 🐬 EVENT : enter_room ", socketRoom)
 
-        // search current chatroom from api server
+        // api 서버에서 받은 채팅방이름으로 소켓룸을 만듦
+        socket.join(socketRoom);
+        console.log('socket 서버에도 채팅방 입장(or 개설) ', socketRoom);
+        console.log('socket 서버에도 채팅방 목록 ', socket.rooms);
+
+        const enterMsg = `${socketToMember[socket.id]} 가 ${socketRoom} 에 입장했습니다.`
+
+        const Message = {
+            type : 'notice', //css로 내가 보냈는지 남이 보냈는지 별도로 표기
+            text : enterMsg
+        }
+        console.log(Message)
+
+        socket.to(socketRoom).emit("enter_msg", Message)
+        
+        // 소켓룸 이름을 넣어서 참여중인 멤버들의 실제 'member Id' 를 반환
+        const memberIds = getRoomMembersID(socketRoom)
+        done(memberIds)
+
+        // (temporarily deprecated) search current chatroom from api server
+        /*
         axios.get('http://localhost:8080/chatroom/getMyChatrooms?memberId=24241')
         .then(response => {
  
@@ -175,8 +233,14 @@ io.on('connection', async function (socket) {
                 socket.join(existingRoom.chatroomName);
 
                 const enterMsg = `${socket.id} 가 ${existingRoom.chatroomName} 에 입장했습니다.`
-                socket.to(existingRoom.chatroomName).emit("enter_msg", enterMsg)
-                console.log(enterMsg)
+
+                const Message = {
+                    type : 'notice', //css로 내가 보냈는지 남이 보냈는지 별도로 표기
+                    text : enterMsg
+                }
+
+                socket.to(existingRoom.chatroomName).emit("enter_msg", Message)
+                console.log(Message)
                 
                 const socketData ={
                     'current_socket.id' : socket.id,
@@ -199,23 +263,31 @@ io.on('connection', async function (socket) {
         .catch(error => {
             console.error('There was an error fetching the chat rooms!', error);
         });
+        */
     })
 
     // quit chat Room
-    socket.on('leave_room', (roomName,done) => {
-        console.log("🏇 퇴장한 roomName ",roomName)
+    socket.on('leave_room', (roomInfo,done) => {
+        console.log("\n\n\n 🐬 EVENT : leave_room ")
+        console.log("퇴장한 roomInfo ",roomInfo)
         
-        socket.leave(roomName);
+        socket.leave(roomInfo.chatroomName);
         console.log('🎴 socket.rooms', socket.rooms); // 소켓 자신만 남음
         console.log('🎴 publicRooms() ', publicRooms()); // 남은 방...
 
-        const leaveMsg = `${socket.id} 가 ${roomName} 에서 퇴장했습니다.`
-        socket.to(roomName).emit("leave_msg", leaveMsg)
-        console.log(leaveMsg)
+        const leaveMsg = `${socket.id} 가 ${roomInfo.chatroomName} 에서 퇴장했습니다.`
+
+        const Message = {
+            type : 'notice', //css로 내가 보냈는지 남이 보냈는지 별도로 표기
+            text : leaveMsg
+        }
+
+        socket.to(roomInfo.chatroomName).emit("leave_msg", Message)
+        console.log(Message)
         done(roomName);
     });
 
-    // receive a nickname changed
+    // (deprecated) receive a nickname changed
     var nickname = 'NEWBIE';
     socket.on("nickname", function (data) {
         
@@ -239,7 +311,7 @@ io.on('connection', async function (socket) {
     io.emit('msg', `NEWBIE (${socket.id}) has entered the server. (입장시간 : ${socket.handshake.time}))`)
 
     
-    // receive a message and display to all and also sender himself
+    // (deprecated) receive a message and display to all and also sender himself
     socket.on('msg', async function (chatMsg) {
         console.log(socket.id,': ', chatMsg);
         // broadcasting a message to everyone except for the sender
@@ -262,11 +334,14 @@ io.on('connection', async function (socket) {
     });
 
     // receive a spsecific msg and show only to its room
-    socket.on("msg_toRoom", async (chatMsg,room) => {
-        console.log("recevie specific msg, room => ", chatMsg, room);
+    socket.on("msg_toRoom", async (chatMsg, roomInfo) => {
+        console.log("\n\n\n 🐬 EVENT : msg_toRoom ");
+        console.log("보낸 메세지=>", chatMsg);
+        console.log("roomInfo => ", roomInfo);
 
         const specific_chat = {
-            chatroomName : room,
+            chatroomID : roomInfo.chatroomID,
+            chatroomName : roomInfo.chatroomName,
             'socket.rooms' : Array.from(socket.adapter.rooms),
             'socket.sids' : Array.from(socket.adapter.sids),
             'socket.id' : socket.id,
@@ -275,10 +350,13 @@ io.on('connection', async function (socket) {
             time : new Date().toString()
         }
 
-        const msg = `${specific_chat.nickname} : ${specific_chat.chatMsg} (${specific_chat.time})`;
+        await mongooseFunctionSJ.mongooseWrite(modelChat, specific_chat);
 
-        await mongooseFunctionSJ.mongooseWrite(modelChat, msg);
-        socket.to(room).emit("specific_chat", msg);
+        const otherMessage = {
+            type : 'other', //css로 내가 보냈는지 남이 보냈는지 별도로 표기
+            text : `${specific_chat.nickname} : ${specific_chat.chatMsg} (${specific_chat.time})`
+        }    
+        socket.to(roomInfo.chatroomName).emit("specific_chat", otherMessage);
 
     })
 
