@@ -10,7 +10,7 @@ async function mongooseSetup(){
     const dbURI = `mongodb://${username}:${encodedPassword}@localhost:27017/sss`;
 
     mongoose.connect(dbURI)
-    .then(() => console.log('MongoDB connected'))
+    .then(() => console.log('✅ mongoose connected'))
     .catch(err => console.log('MongoDB connection error:', err));
     
     // 3. 연결된 testDB 사용
@@ -22,24 +22,32 @@ async function mongooseSetup(){
     });
     // 5. 연결 성공
     db.once('open', function() {
-        console.log('Connected!');
+        console.log('✅ mongoDB connected');
     });
 
     // 6. Schema 생성
-    var chat = mongoose.Schema({
-        chatroomID : 'string',
-        chatroomName : 'string',
-        nickname : 'string',
-        'socket.id' : 'string',
-        chatMsg : 'string',
-        time : 'string'
+    var chatMessageSchema = new mongoose.Schema({
+        chatroomID : String,
+        chatroomName : String,
+        sender : String,
+        chatMsg : String,
+        time : { type: Date, default: Date.now },
+        readMembers : [String]
     });
 
-    // 7. 정의된 스키마를 객체처럼 사용할 수 있도록 model() 함수로 컴파일
-    var ModelChat = mongoose.model('Schema', chat);
+    var popularChatroomSchema = new mongoose.Schema({
+      chatroomID: String,
+      messageCount: Number,
+      timestamp: { type: Date, default: Date.now, expires: '24h' }
+    });
+    
+    // 7. 정의된 스키마를 객체처럼 사용할 수 있도록 model 함수로 컴파일 (문자열 '' 로 적은게 컬렉션이 됨)
+    var ModelChatMessage = mongoose.model('ChatMessage', chatMessageSchema);
+    var ModelpopularChatroom = mongoose.model('PopularChatroom', popularChatroomSchema);
 
-    return ModelChat;
+    return {ModelChatMessage, ModelpopularChatroom};
 }
+
 
 async function mongooseReadOne(ModelChat, search){
     // 9. 특정 데이터 조회
@@ -81,16 +89,15 @@ async function mongooseWrite(ModelChat,chat){
       }   
 }
 
-async function mongooseUpdate(ModelChat){
+async function mongooseUpdate(ModelChat, update_query, update_action){
     // 11. 데이터 수정
     try {
-        console.log("🦐 mongooseUpdate 실행");
-        const updatedChat = await ModelChat.findOneAndUpdate(
-          { name: 'Alice' },
-          { age: 31 },
-          { new: true } // 업데이트된 문서를 반환하도록 설정
-        );
+        console.log(`🦐 mongooseUpdate 실행`);
+        const updatedChat = await ModelChat.updateMany(update_query, update_action);
+        
         console.log('Chat updated to mongoDB:', updatedChat);
+        return updatedChat;
+
       } catch (err) {
         console.error(err);
       }
