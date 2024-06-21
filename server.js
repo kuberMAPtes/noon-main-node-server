@@ -1,10 +1,12 @@
 //npm install express 
 
 //npm install socket.io
-//npm install mongoose
-//npm install redis
-//npm install kafkajs
+//npm install mongoose => 서버에 설치
+//npm install redis => 서버에 설치
+//npm install kafkajs => (일단 생략)
 
+// 컨테이너 : Node 넣고 npm install , ssh 넣기 
+// 서버 : mongoose, redis, 
 
 
 /*
@@ -436,27 +438,36 @@ const bodyParser = require('body-parser'); // body-parser 추가
 app.use(bodyParser.json()); // JSON 형식의 요청 본문을 파싱
 app.use(bodyParser.urlencoded({ extended: true })); // URL-encoded 형식의 요청 본문을 파싱
 
-// client 요청을 받아 mongoDB에서 안읽은 메세지 수를 가져옴
+// client 요청을 받아 mongoDB에서 안읽은 메세지 수 + 활발한 채팅방을 가져옴
 app.post('/node/messageUnread', async function(req,res){
     console.log("\n\n\n 🐬 EVENT : /node/messageUnread ");
-    const { chatroomIDs, memberID } = req.body;
+    const { chatrooms, memberID } = req.body;
+
+    console.log("chatrooms 받았다", chatrooms);
 
     try {
-        const unreadMessagesCount = {};
-
-        for (const chatroomID of chatroomIDs) {
+        for (const chatroom of chatrooms) {
             const search = {
-                chatroomID: chatroomID,
+                chatroomID: chatroom.chatroomID,
                 readMembers: { $ne: memberID }
             };
 
-            const count = await mongooseFunctionSJ.mongooseReadMany(MongooseModel.ModelChatMessage, search);
+            const unreadMessageCount = await mongooseFunctionSJ.mongooseReadMany(MongooseModel.ModelChatMessage, search);
             
-            unreadMessagesCount[chatroomID] = count.length;
+            chatroom.unreadMessage = unreadMessageCount.length
         }
 
-        console.log("messageUnread 리턴 할 것", unreadMessagesCount);
-        res.json(unreadMessagesCount);
+        console.log("chatroom 최종" , chatrooms);
+
+        var activeRooms;
+        await redisClient.get('activeRooms', (err, data) => {
+            if (err) throw err;
+        
+            activeRooms = JSON.parse(data);
+
+            const response = {chatrooms:chatrooms, activeRooms: activeRooms}
+            res.json(response);
+        });
 
     } catch (error) {
         console.error('Error fetching unread messages count', error);
