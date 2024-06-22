@@ -257,10 +257,13 @@ io.on('connection', async function (socket) {
         console.log(Message)
 
         socket.to(socketRoom).emit("enter_msg", Message)
-        
         // 소켓룸 이름을 넣어서 참여중인 멤버들의 실제 'member Id' 를 반환
         const memberIds = getRoomMembersID(socketRoom)
         done(memberIds)
+
+        // 방 입장하면 기존 소켓들에게 알려 실시간 접속자 업데이트되게끔
+        socket.to(socketRoom).emit("enter_room_notice", memberIds);
+
 
         // (temporarily deprecated) search current chatroom from api server
         /*
@@ -338,6 +341,12 @@ io.on('connection', async function (socket) {
         socket.to(roomInfo.chatroomName).emit("leave_msg", Message)
         console.log(Message)
         done(roomInfo.chatroomName);
+
+        const memberIds = getRoomMembersID(roomInfo.chatroomName)
+        done(memberIds)
+
+        // 방 나가면 기존 소켓 유저에게 실시간 유저 정보를 재전달
+        socket.to(roomInfo.chatroomName).emit("leave_room_notice", memberIds);
     });
 
     // (개발중) kick user from chat Room
@@ -366,7 +375,8 @@ io.on('connection', async function (socket) {
 
         const otherMessage = {
             type : 'other', //css로 내가 보냈는지 남이 보냈는지 별도로 표기
-            text : `${specific_chat.sender} : ${specific_chat.chatMsg} \n( ${specific_chat.time.toString()} )`
+            text : `${specific_chat.sender} : ${specific_chat.chatMsg} \n( ${specific_chat.time.toString()} )`,
+            readMembers : specific_chat.readMembers
         }    
         socket.to(roomInfo.chatroomName).emit("specific_chat", otherMessage);
 
@@ -438,7 +448,7 @@ const bodyParser = require('body-parser'); // body-parser 추가
 app.use(bodyParser.json()); // JSON 형식의 요청 본문을 파싱
 app.use(bodyParser.urlencoded({ extended: true })); // URL-encoded 형식의 요청 본문을 파싱
 
-// client 요청을 받아 mongoDB에서 안읽은 메세지 수 + 활발한 채팅방을 가져옴
+// myChatroomList client 요청을 받아 mongoDB에서 안읽은 메세지 수 + 활발한 채팅방을 가져옴
 app.post('/node/messageUnread', async function(req,res){
     console.log("\n\n\n 🐬 EVENT : /node/messageUnread ");
     const { chatrooms, memberID } = req.body;
