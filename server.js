@@ -192,6 +192,11 @@ io.on('connection', async function (socket) {
         const updated_result = await mongooseFunctionSJ.mongooseUpdate(MongooseModel.ModelChatMessage, update_query, update_action);
 
         done(updated_result);
+
+        // (개발중) 메세지 읽음을 타유저에게도 알려 실시간 업데이트하기위함
+        // socket.emit('message_read_notice', ()=>{
+
+        // })
     })
 
     // get user List from joined socket room
@@ -495,7 +500,7 @@ const cron = require('node-cron');
 
 cron.schedule('*/10 * * * * *', async () => { // 매 시간마다 실행
     const twentyFourHoursAgo = new Date(Date.now() - 24*60*60*1000); // 24시간 전을 의미함 10분전까지 => 10 * 60 * 1000
-    console.log('⌛ 활발한 채팅방 체크 (5초마다 조회됩니다) ');
+    // console.log('⌛ 활발한 채팅방 체크 (5초마다 조회됩니다) ');
 
     // 초: 매 5초마다 (*/5 이후 5개)
     // 분: 매 5분마다 (*/5 이후 4개)
@@ -522,8 +527,7 @@ cron.schedule('*/10 * * * * *', async () => { // 매 시간마다 실행
         await MongooseModel.ModelpopularChatroom.deleteMany({});
 
         await MongooseModel.ModelpopularChatroom.insertMany(formattedChatrooms);
-        console.log('기존 인기채팅 mongoDB 삭제하고 인기채팅방 데이터를 변환해서  성공적으로 저장되었습니다');
-
+        
     } catch (error) {
         console.error('데이터 저장 중 오류가 발생했습니다:', error);
     }
@@ -534,9 +538,7 @@ cron.schedule('*/10 * * * * *', async () => { // 매 시간마다 실행
         // const updatedPopularChatrooms = await MongooseModel.ModelpopularChatroom.find({});
         
         redisClient.set('activeRooms', JSON.stringify(formattedChatrooms));
-
-        console.log('redis 에 활발한 채팅방 목록이 업데이트되었습니다.');
-       
+        
         redisClient.get('activeRooms', (err, data) => {
             if (err) throw err;
             console.log('redis 에서 구경한 활발한 채팅방:', JSON.parse(data));
