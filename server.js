@@ -247,7 +247,7 @@ io.on('connection', async function (socket) {
     }
 
         
-    // open new chat Room and return room's 실시간접속자 information 
+    // open new chat Room and return room's 실시간접속자 information and send notice msg
     socket.on("enter_room", async (socketRoom,done)=>{
         console.log("\n\n\n 🐬 EVENT : enter_room ", socketRoom)
 
@@ -331,7 +331,7 @@ io.on('connection', async function (socket) {
         */
     })
 
-    // quit chat Room
+    // quit chat Room and send notice msg
     socket.on('leave_room', (roomInfo,done) => {
         console.log("\n\n\n 🐬 EVENT : leave_room ")
         console.log("퇴장한 roomInfo ",roomInfo)
@@ -358,7 +358,7 @@ io.on('connection', async function (socket) {
         socket.to(roomInfo.chatroomName).emit("leave_room_notice", memberIds);
     });
 
-    // (개발중) kick user from chat Room
+    // kick user from chat Room and send notice msg
     socket.on('kick_room', (memberID, chatroomName, targetMemberId) => {
         console.log("\n\n\n 🐬 EVENT : kick_room ")
 
@@ -381,9 +381,9 @@ io.on('connection', async function (socket) {
             type : 'notice', //css로 내가 보냈는지 남이 보냈는지 별도로 표기
             text : kickMsg
         }
-
-        socket.to(chatroomName).emit("notice_msg", kickMsg)
-        console.log(kickMsg)
+        
+        socket.to(chatroomName).emit("notice_msg", Message)
+        console.log(Message)
     })
 
     // receive a spsecific msg and show only to its room
