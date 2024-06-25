@@ -7,7 +7,8 @@ async function mongooseSetup(){
     const username = 'scott';
     const password = 'tiger6609!';
     const encodedPassword = encodeURIComponent(password);
-    const dbURI = `mongodb://${username}:${encodedPassword}@localhost:27017/sss`;
+    const dbURI = `mongodb://${username}:${encodedPassword}@127.0.0.1:27017/sss`;
+    console.log(dbURI);
 
     mongoose.connect(dbURI)
     .then(() => console.log('✅ mongoose connected'))
