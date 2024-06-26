@@ -654,6 +654,3 @@ app.get('/api/chatSearch', async (req, res) => {
         res.status(500).json({ error: 'Error fetching chat history' })
     }
 });
-
-
-
