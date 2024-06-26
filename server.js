@@ -124,16 +124,19 @@ const io = SocketIO(server, {
 
 // 연결된 소켓과 로그인 유저 아이디 간의 매핑을 저장할 객체
 const socketToMember = {};
+const memberToSocket = {};
 
 io.on('connection', async function (socket) {
 
     console.log(socket.id, ' connected...');
 
-    // mapping memberId to socketId
+    // mapping memberId to socketId. vice versa
     socket.on('mapping_memberID_to_socketID', (memberID, done) => {
         // 소켓 ID와 사용자 이름 매핑 저장
         socketToMember[socket.id] = memberID;
-        
+        // 사용자 이름을 다시 소켓ID에도 매핑
+        memberToSocket[memberID] = socket.id;
+
         done(`${memberID} 가 ${socket.id} 에 매핑됨`)
     })
 
@@ -159,7 +162,7 @@ io.on('connection', async function (socket) {
     socket.on("live_socketRoomInfo", async (roomInfo, done) => {
         console.log("\n\n\n 🐬 EVENT : live_socketRoomInfo ")
         // 입장한 채팅룸
-        console.log("🌹클라이언트가 요청한 roomInfo", roomInfo);
+        console.log("🌹클라이언트가 요청한 roomInfo", roomInfo.length);
 
         if (Object.keys(roomInfo).length === 0){ //roomInfo 가 null or undefined 일 경우 대비
             console.log("🚨roomInfo 없어서 init_chatRoom 종료");
@@ -176,8 +179,8 @@ io.on('connection', async function (socket) {
     socket.on("message_read", async (memberID, roomInfo, done)=>{
         console.log("\n\n\n 🐬 EVENT : message_read ");
 
-        console.log("memberID=>", memberID);
-        console.log("roomInfo => ", roomInfo);
+        // console.log("memberID=>", memberID);
+        // console.log("roomInfo => ", roomInfo);
 
         const update_query = {
             //readMember 에 사용자 ID가 없는 경우찾기 
@@ -244,7 +247,7 @@ io.on('connection', async function (socket) {
     }
 
         
-    // open new chat Room and return room's 실시간접속자 information 
+    // open new chat Room and return room's 실시간접속자 information and send notice msg
     socket.on("enter_room", async (socketRoom,done)=>{
         console.log("\n\n\n 🐬 EVENT : enter_room ", socketRoom)
 
@@ -261,7 +264,8 @@ io.on('connection', async function (socket) {
         }
         console.log(Message)
 
-        socket.to(socketRoom).emit("enter_msg", Message)
+        socket.to(socketRoom).emit("notice_msg", Message)
+        
         // 소켓룸 이름을 넣어서 참여중인 멤버들의 실제 'member Id' 를 반환
         const memberIds = getRoomMembersID(socketRoom)
         done(memberIds)
@@ -327,7 +331,7 @@ io.on('connection', async function (socket) {
         */
     })
 
-    // quit chat Room
+    // quit chat Room and send notice msg
     socket.on('leave_room', (roomInfo,done) => {
         console.log("\n\n\n 🐬 EVENT : leave_room ")
         console.log("퇴장한 roomInfo ",roomInfo)
@@ -343,7 +347,7 @@ io.on('connection', async function (socket) {
             text : leaveMsg
         }
 
-        socket.to(roomInfo.chatroomName).emit("leave_msg", Message)
+        socket.to(roomInfo.chatroomName).emit("notice_msg", Message)
         console.log(Message)
         done(roomInfo.chatroomName);
 
@@ -354,9 +358,33 @@ io.on('connection', async function (socket) {
         socket.to(roomInfo.chatroomName).emit("leave_room_notice", memberIds);
     });
 
-    // (개발중) kick user from chat Room
-    // socket.on('kick_room', () => {
-    // })
+    // kick user from chat Room and send notice msg
+    socket.on('kick_room', (memberID, chatroomName, targetMemberId) => {
+        console.log("\n\n\n 🐬 EVENT : kick_room ")
+
+        // 1. targetMemberId 로 socket 찾기
+        const socketId = memberToSocket[targetMemberId]
+        // 2. socketId 로 소켓 찾기
+        const targetSocket = io.sockets.sockets.get(socketId);
+        // const socketToMember = {};
+        
+        if (targetSocket) {
+            targetSocket.leave(chatroomName);
+            console.log(`${socketId} was kicked from room ${chatroomName}`);
+          } else {
+            console.log(`${socketId} is not found or not on air`);
+        } 
+
+        const kickMsg = `${memberID} 님이 ${targetMemberId} 를 ${chatroomName} 에서 내보냈습니다.`
+
+        const Message = {
+            type : 'notice', //css로 내가 보냈는지 남이 보냈는지 별도로 표기
+            text : kickMsg
+        }
+        
+        socket.to(chatroomName).emit("notice_msg", Message)
+        console.log(Message)
+    })
 
     // receive a spsecific msg and show only to its room
     socket.on("msg_toRoom", async (chatMsg, roomInfo) => {
@@ -498,7 +526,7 @@ app.post('/node/messageUnread', async function(req,res){
 
 const cron = require('node-cron');
 
-cron.schedule('*/10 * * * * *', async () => { // 매 시간마다 실행
+cron.schedule('*/10 * * * *', async () => { // 매 시간마다 실행
     const twentyFourHoursAgo = new Date(Date.now() - 24*60*60*1000); // 24시간 전을 의미함 10분전까지 => 10 * 60 * 1000
     // console.log('⌛ 활발한 채팅방 체크 (5초마다 조회됩니다) ');
 
@@ -610,6 +638,10 @@ app.get('/events/:event', async(req, res) => {
 /*
  * deprecated
 */
+
+app.head('/health', function(req,res){
+    res.send("ok");
+})
 
 // (deprecated) /chat 으로 들어올 경우 client-server-nodejs 에서 html 뿌려줌
 app.get('/chat', function(req, res) {
