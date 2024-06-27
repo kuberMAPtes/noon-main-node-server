@@ -29,6 +29,7 @@ async function mongooseSetup(){
     // 6. Schema 생성
     var chatMessageSchema = new mongoose.Schema({
         chatroomID : String,
+        buildingID : String,
         chatroomName : String,
         sender : String,
         chatMsg : String,
