@@ -483,8 +483,8 @@ app.use(bodyParser.json()); // JSON 형식의 요청 본문을 파싱
 app.use(bodyParser.urlencoded({ extended: true })); // URL-encoded 형식의 요청 본문을 파싱
 
 // myChatroomList client 요청을 받아 mongoDB에서 안읽은 메세지 수 + 활발한 채팅방을 가져옴
-app.post('/node/messageUnread', async function(req,res){
-    console.log("\n\n\n 🐬 EVENT : /node/messageUnread ");
+app.post('/node/messageUnreadAndActiverooms', async function(req,res){
+    console.log("\n\n\n 🐬 EVENT : /node/messageUnreadAndActiverooms ");
     const { chatrooms, memberID } = req.body;
 
     console.log("chatrooms 받았다", chatrooms);
@@ -582,7 +582,7 @@ cron.schedule('*/10 * * * * *', async () => { // 매 시간마다 실행
         
         redisClient.get('activeRooms', (err, data) => {
             if (err) throw err;
-            console.log('redis 에서 구경한 활발한 채팅방:', JSON.parse(data));
+            // console.log('redis 에서 구경한 활발한 채팅방:', JSON.parse(data));
         });
 
         } catch (error) {
@@ -591,7 +591,10 @@ cron.schedule('*/10 * * * * *', async () => { // 매 시간마다 실행
 
     // 건물별 채팅방중에 활발한것
     const popularChatroomsGroupByBuilding = await MongooseModel.ModelChatMessage.aggregate([ // 데이터 처리 및 집계를 위한 함수
-        { $match: { time: { $gte: twentyFourHoursAgo } } }, // time이 일정기준보다 크거나 같은 메시지들 선택 (gte : greater than or equal to)
+        { $match: { 
+            time: { $gte: twentyFourHoursAgo },
+            buildingID: { $ne: "0" } 
+        } }, 
         { 
             $group: { 
                 _id: { buildingID: '$buildingID', chatroomID: '$chatroomID' },
@@ -599,6 +602,12 @@ cron.schedule('*/10 * * * * *', async () => { // 매 시간마다 실행
             }
         }, // buildingID와 chatroomID로 그룹화하고 메시지 수를 셈   
         { 
+            $sort: { 
+                '_id.buildingID': 1,
+                messageCount: -1 
+            } 
+        }, // messageCount 기준으로 내림차순 정렬
+        {
             $group: { 
                 _id: '$_id.buildingID', 
                 chatrooms: { 
@@ -609,57 +618,26 @@ cron.schedule('*/10 * * * * *', async () => { // 매 시간마다 실행
                 }
             }
         }, // buildingID별로 그룹화하고 각 buildingID에 해당하는 chatroomID와 메시지 수를 배열에 저장
-        { 
-            $project: { // project : 필드를 포함하거나 제외하여 문서의 구조를 변경
+        {
+            $project: {
                 chatrooms: { 
-                    $slice: [ // slice : 배열의 부분집합을 반환 [array,n] 에서 array는 잘라낼 배열 n은 배열 시작부터 자를 원소 수
-                        { $sortArray: { input: '$chatrooms', sortBy: { messageCount: -1 } } }, 
-                        3 
-                        // sortArray : 배열 내부 요소들을 정렬
-                    ]
-                } 
-            } 
-        } // 각 buildingID별로 chatrooms 배열을 messageCount 기준으로 정렬하고 상위 3개만 선택
-    ]);
-
-    /**
-     * 반환결과 예시 
-     * 
-    [
-        {
-            "_id": 10001,
-            "chatrooms": [
-                { "chatroomID": 10, "messageCount": 50 },
-                { "chatroomID": 11, "messageCount": 45 },
-                { "chatroomID": 12, "messageCount": 30 }
-            ]
-        },
-        {
-            "_id": 10002,
-            "chatrooms": [
-                { "chatroomID": 14, "messageCount": 60 },
-                { "chatroomID": 15, "messageCount": 55 },
-                { "chatroomID": 16, "messageCount": 50 }
-            ]
-        },
-        // ... 더 많은 buildingID에 대한 결과
-    ]
-    */
-
+                    $slice: ['$chatrooms', 1] 
+                }
+            }
+        } // 각 buildingID별로 상위 3개의 채팅방만 선택
+    ])
+ e
     // 집계를 위해 사용한 _id 를 chatroomID로 매핑
     const formattedChatroomsGroupByBuilding = popularChatroomsGroupByBuilding.map(chatroom => ({
-        buildingID: building._id,
-        chatroomID: chatroom._id, // _id를 chatroomId로 변경
-        messageCount: chatroom.messageCount
+        buildingID: chatroom._id,
+        chatrooms: chatroom.chatrooms
     }));
     console.log("건물별 활발잼", formattedChatroomsGroupByBuilding);
 
 
     // 건물별 활발한 채팅방을 redisDB에 저장 
     try {
-    // 몽고 DB에 들렀다 올때나 써야되는 코드 (없어도 됨 그냥 해놓음)
-    // const updatedPopularChatrooms = await MongooseModel.ModelpopularChatroom.find({});
-    
+
     redisClient.set('activeRoomsGroupByBuilding', JSON.stringify(formattedChatroomsGroupByBuilding));
     
     redisClient.get('activeRoomsGroupByBuilding', (err, data) => {
@@ -675,7 +653,7 @@ cron.schedule('*/10 * * * * *', async () => { // 매 시간마다 실행
 
 
 // 활발한 채팅방을 rest 로 제공
-app.get('/SJredis/activeRooms', (req,res) => {
+app.get('/node/activeRooms', (req,res) => {
     
     redisClient.get('activeRooms', (err, reply) => {
         console.log("🌈 redis 실행")
@@ -690,7 +668,7 @@ app.get('/SJredis/activeRooms', (req,res) => {
 })
 
 // 건물별 활발한 채팅방을 rest 로 제공
-app.get('/SJredis/activeRoomsGroupByBuilding', (req,res) => {
+app.get('/node/activeRoomsGroupByBuilding', (req,res) => {
 
     redisClient.get('activeRoomsGroupByBuilding', (err, reply) => {
         console.log("🌈 redis 실행")
