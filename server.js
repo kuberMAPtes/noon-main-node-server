@@ -627,7 +627,7 @@ cron.schedule('*/10 * * * * *', async () => { // 매 시간마다 실행
             }
         } // 각 buildingID별로 상위 3개의 채팅방만 선택
     ])
- e
+
     // 집계를 위해 사용한 _id 를 chatroomID로 매핑
     const formattedChatroomsGroupByBuilding = popularChatroomsGroupByBuilding.map(chatroom => ({
         buildingID: chatroom._id,
