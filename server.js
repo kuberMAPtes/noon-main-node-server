@@ -409,7 +409,8 @@ io.on('connection', async function (socket) {
 
         const otherMessage = {
             type : 'other', //css로 내가 보냈는지 남이 보냈는지 별도로 표기
-            text : `${specific_chat.sender} : ${specific_chat.chatMsg} \n( ${specific_chat.time.toString()} )`,
+            text : `${specific_chat.sender} : ${specific_chat.chatMsg}`,
+            timestamp : specific_chat.time.toString(),
             readMembers : specific_chat.readMembers
         }    
         socket.to(roomInfo.chatroomName).emit("specific_chat", otherMessage);
