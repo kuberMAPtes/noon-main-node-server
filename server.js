@@ -162,7 +162,7 @@ io.on('connection', async function (socket) {
     socket.on("live_socketRoomInfo", async (roomInfo, done) => {
         console.log("\n\n\n 🐬 EVENT : live_socketRoomInfo ")
         // 입장한 채팅룸
-        console.log("🌹클라이언트가 요청한 roomInfo", roomInfo.length);
+        console.log("🌹클라이언트가 요청한 roomInfo", roomInfo);
 
         if (Object.keys(roomInfo).length === 0){ //roomInfo 가 null or undefined 일 경우 대비
             console.log("🚨roomInfo 없어서 init_chatRoom 종료");
@@ -409,7 +409,8 @@ io.on('connection', async function (socket) {
 
         const otherMessage = {
             type : 'other', //css로 내가 보냈는지 남이 보냈는지 별도로 표기
-            text : `${specific_chat.sender} : ${specific_chat.chatMsg}`,
+            text : specific_chat.chatMsg,
+            sender : socketToMember[socket.id],
             timestamp : specific_chat.time.toString(),
             readMembers : specific_chat.readMembers
         }    
@@ -633,7 +634,7 @@ cron.schedule('*/10 * * * * *', async () => { // 매 시간마다 실행
         buildingID: chatroom._id,
         chatrooms: chatroom.chatrooms
     }));
-    console.log("건물별 활발잼", formattedChatroomsGroupByBuilding);
+    //console.log("건물별 활발잼", formattedChatroomsGroupByBuilding);
 
 
     // 건물별 활발한 채팅방을 redisDB에 저장 
@@ -643,7 +644,7 @@ cron.schedule('*/10 * * * * *', async () => { // 매 시간마다 실행
     
     redisClient.get('activeRoomsGroupByBuilding', (err, data) => {
         if (err) throw err;
-        console.log('redis 에서 구경한 건물별활발한 채팅방:', JSON.parse(data));
+        //console.log('redis 에서 구경한 건물별활발한 채팅방:', JSON.parse(data));
     });
 
     } catch (error) {
