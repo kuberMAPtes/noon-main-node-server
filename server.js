@@ -662,7 +662,7 @@ app.get('/node/activeRooms', (req,res) => {
             res.status(500).send('Error getting activeRooms');
         } else {
             console.log(reply);
-            res.send(`Get activeRooms: ${reply}`);
+            res.send(`${reply}`);
         }
     });
 })
@@ -677,7 +677,7 @@ app.get('/node/activeRoomsGroupByBuilding', (req,res) => {
             res.status(500).send('Error getting activeRoomsGroupByBuilding');
         } else {
             console.log(reply);
-            res.send(`Get activeRoomsGroupByBuilding: ${reply}`);
+            res.send(`${reply}`);
         }
     });
 
