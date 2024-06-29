@@ -409,7 +409,8 @@ io.on('connection', async function (socket) {
 
         const otherMessage = {
             type : 'other', //css로 내가 보냈는지 남이 보냈는지 별도로 표기
-            text : `${specific_chat.sender} : ${specific_chat.chatMsg} \n( ${specific_chat.time.toString()} )`,
+            text : `${specific_chat.sender} : ${specific_chat.chatMsg}`,
+            timestamp : specific_chat.time.toString(),
             readMembers : specific_chat.readMembers
         }    
         socket.to(roomInfo.chatroomName).emit("specific_chat", otherMessage);
@@ -626,7 +627,7 @@ cron.schedule('*/10 * * * * *', async () => { // 매 시간마다 실행
             }
         } // 각 buildingID별로 상위 3개의 채팅방만 선택
     ])
- e
+
     // 집계를 위해 사용한 _id 를 chatroomID로 매핑
     const formattedChatroomsGroupByBuilding = popularChatroomsGroupByBuilding.map(chatroom => ({
         buildingID: chatroom._id,
@@ -791,6 +792,3 @@ app.get('/api/chatSearch', async (req, res) => {
         res.status(500).json({ error: 'Error fetching chat history' })
     }
 });
-
-
-
