@@ -125,10 +125,34 @@ const io = SocketIO(server, {
 // 연결된 소켓과 로그인 유저 아이디 간의 매핑을 저장할 객체
 const socketToMember = {};
 const memberToSocket = {};
+const socketToSession = {}; // 세션 ID와 소켓 ID 매핑
+const sessionToRoom = {}; // 세션 ID와 방 이름 매핑
 
 io.on('connection', async function (socket) {
+    console.log("\n\n\n 🐬 EVENT : connection");
 
-    console.log(socket.id, ' connected...');
+    const sessionID = socket.handshake.query.sessionID;
+
+    // 세션을 저장해서 새로고침시 새로운 소켓으로 처리안되도록함
+    if (sessionID) {
+        // 세션 ID가 존재할 경우
+        console.log(`Session ID: ${sessionID} connected with Socket ID: ${socket.id}`);
+
+        // 기존 세션이 있는지 확인??
+        if (socketToSession[sessionID]) {
+            const oldSocketId = socketToSession[sessionID];
+            const oldSocket = io.sockets.sockets.get(oldSocketId);
+            if (oldSocket) {
+                // 기존 소켓 연결을 끊고 새 소켓으로 교체
+                oldSocket.disconnect();
+            }
+        }
+
+        // 새 소켓 ID로 세션 ID 업데이트
+        socketToSession[sessionID] = socket.id;
+    } else {
+        console.log('No session ID provided.');
+    }
 
     // mapping memberId to socketId. vice versa
     socket.on('mapping_memberID_to_socketID', (memberID, done) => {
@@ -178,6 +202,7 @@ io.on('connection', async function (socket) {
     // add a User who readed messages
     socket.on("message_read", async (memberID, roomInfo, done)=>{
         console.log("\n\n\n 🐬 EVENT : message_read ");
+        console.log(memberID, " 가 메세지읽은거 처리중")
 
         // console.log("memberID=>", memberID);
         // console.log("roomInfo => ", roomInfo);
@@ -250,9 +275,17 @@ io.on('connection', async function (socket) {
     // open new chat Room and return room's 실시간접속자 information and send notice msg
     socket.on("enter_room", async (socketRoom,done)=>{
         console.log("\n\n\n 🐬 EVENT : enter_room ", socketRoom)
+        // 세션이 이미 이 방에 있는지 확인하고 이미 있다면 다시 join 안시킴
+        if (sessionToRoom[sessionID] === socketRoom) {
+            console.log(`Session ID: ${sessionID} is already in room ${socketRoom}, ignoring.`);
+            return done(`Already in room ${socketRoom}`);
+        }
 
         // api 서버에서 받은 채팅방이름으로 소켓룸을 만듦
         socket.join(socketRoom);
+        sessionToRoom[sessionID] = socketRoom; //여긴 향후에 여러채팅방 접속했을때 문제생길수도 push 가 나을듯
+        console.log(`Session ID: ${sessionID} entered room ${socketRoom}`);
+
         console.log('socket 서버에도 채팅방 입장(or 개설) ', socketRoom);
         console.log('socket 서버에도 채팅방 목록 ', socket.rooms);
 
@@ -333,6 +366,23 @@ io.on('connection', async function (socket) {
 
     // quit chat Room and send notice msg
     socket.on('leave_room', (roomInfo,done) => {
+        console.log("\n\n\n 🐬 EVENT : leave_room")
+        console.log("퇴장한 roomInfo ",roomInfo)
+        
+        socket.leave(roomInfo.chatroomName);
+        console.log('🎴 socket.rooms', socket.rooms); // 소켓 자신만 남음
+        console.log('🎴 publicRooms() ', publicRooms()); // 남은 방...
+
+        // 방 나가면 기존 소켓 유저에게 실시간 유저 정보를 재전달
+        const memberIds = getRoomMembersID(roomInfo.chatroomName)
+        socket.to(roomInfo.chatroomName).emit("leave_room_notice", memberIds);
+
+        done(roomInfo.chatroomName);
+ 
+    });
+
+    // quit chat Room and send notice msg
+    socket.on('leave_room_forever', (roomInfo,done) => {
         console.log("\n\n\n 🐬 EVENT : leave_room ")
         console.log("퇴장한 roomInfo ",roomInfo)
         
@@ -349,14 +399,14 @@ io.on('connection', async function (socket) {
 
         socket.to(roomInfo.chatroomName).emit("notice_msg", Message)
         console.log(Message)
-        done(roomInfo.chatroomName);
-
-        const memberIds = getRoomMembersID(roomInfo.chatroomName)
-        done(memberIds)
 
         // 방 나가면 기존 소켓 유저에게 실시간 유저 정보를 재전달
+        const memberIds = getRoomMembersID(roomInfo.chatroomName)
         socket.to(roomInfo.chatroomName).emit("leave_room_notice", memberIds);
-    });
+
+        done(roomInfo.chatroomName);
+
+   });
 
     // kick user from chat Room and send notice msg
     socket.on('kick_room', (memberID, chatroomName, targetMemberId) => {
@@ -369,7 +419,11 @@ io.on('connection', async function (socket) {
         // const socketToMember = {};
         
         if (targetSocket) {
+            //강퇴당한 놈 소켓에서 아웃
             targetSocket.leave(chatroomName);
+
+            //강퇴당한 놈 채팅방에서 내보내기
+            targetSocket.emit("kicked_room",{ roomId: chatroomName })
             console.log(`${socketId} was kicked from room ${chatroomName}`);
           } else {
             console.log(`${socketId} is not found or not on air`);
@@ -467,9 +521,20 @@ io.on('connection', async function (socket) {
 
     // user connection lost
     socket.on('disconnect', function (data) {
-        console.log(`User ${socket.id} Out!`)
+        console.log("\n\n\n 🐬 EVENT : leave_room ")
+        console.log(`User ${socket.id} sessionID : ${sessionID} Out!`)
         io.emit('msg', `${socket.id} has left the server.`);
         //io.emit('leave_room', publicRooms());
+        if (socketToSession[sessionID] === socket.id) {
+            console.log("서버의 세션에 해당 소켓아이디가 있어요")
+            // delete socketToSession[sessionID];
+            // delete sessionToRoom[sessionID];
+            console.log("socket->Session", socketToSession)
+            console.log("session->Room", sessionToRoom);
+            console.log("member -> Socket", memberToSocket);
+            console.log("socket -> Member", socketToMember)
+
+        }
     });
 });
 
