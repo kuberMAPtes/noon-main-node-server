@@ -156,6 +156,8 @@ io.on('connection', async function (socket) {
 
     // mapping memberId to socketId. vice versa
     socket.on('mapping_memberID_to_socketID', (memberID, done) => {
+        console.log("\n\n\n 🐬 EVENT : mapping_memberID_to_socketID ")
+
         // 소켓 ID와 사용자 이름 매핑 저장
         socketToMember[socket.id] = memberID;
         // 사용자 이름을 다시 소켓ID에도 매핑
@@ -185,18 +187,24 @@ io.on('connection', async function (socket) {
     // show a initial chatRoom when user join in 
     socket.on("live_socketRoomInfo", async (roomInfo, done) => {
         console.log("\n\n\n 🐬 EVENT : live_socketRoomInfo ")
-        // 입장한 채팅룸
-        console.log("🌹클라이언트가 요청한 roomInfo", roomInfo);
 
         if (Object.keys(roomInfo).length === 0){ //roomInfo 가 null or undefined 일 경우 대비
-            console.log("🚨roomInfo 없어서 init_chatRoom 종료");
+            console.log("🚨roomInfo 없어서 live_socketRoomInfo 종료");
             return null;
         }
 
-        // 채팅룸을 client 에 표시
-        socket.join(roomInfo.chatroomName);
-        done(roomInfo.chatroomName);
-        console.log(`ㅡ ${roomInfo.chatroomName} 에 입장... 이전 채팅내역 조회하자 ...`);
+        // 소켓룸 이름을 넣어서 참여중인 멤버들의 실제 'member Id' 를 반환
+        const memberIds = getRoomMembersID(roomInfo.chatroomName)
+        done(memberIds)
+
+        // 입장한 채팅룸
+        console.log("🌹클라이언트가 요청한 roomInfo 의 실시간 멤버", memberIds);
+
+        console.log('🎴 socket.rooms', socket.rooms); // 소켓 자신만 남음
+        console.log('🎴 publicRooms() ', publicRooms()); // 남은 방...
+
+        // 방 입장하면 기존 소켓들에게도 알려 실시간 접속자 업데이트되게끔
+        socket.to(roomInfo.chatroomName).emit("enter_room_notice", memberIds);
     })
 
     // add a User who readed messages
@@ -251,12 +259,14 @@ io.on('connection', async function (socket) {
     // return public room names by comparing sids and rooms
     function publicRooms(){
         // 현재 소켓 안의 adapter 정보
+        console.log("🌹public rooms 실행")
+
         const { 
             adapter : { sids, rooms } 
         } = socket;
 
-//        console.log("-------------------------------------------------- sids",sids)
-//        console.log("-------------------------------------------------- rooms",rooms)
+       console.log("-------------------------------------------------- sids",sids)
+       console.log("-------------------------------------------------- rooms",rooms)
 
         // 현재 소켓에서 publicRooms 조회
         const publicRooms = [];
@@ -266,7 +276,7 @@ io.on('connection', async function (socket) {
             }
         })
 
-//       console.log("-------------------------------------------------- publicRooms", publicRooms)
+      console.log("-------------------------------------------------- publicRooms", publicRooms)
 
         return publicRooms;
     }
@@ -274,7 +284,9 @@ io.on('connection', async function (socket) {
         
     // open new chat Room and return room's 실시간접속자 information and send notice msg
     socket.on("enter_room", async (socketRoom,done)=>{
+
         console.log("\n\n\n 🐬 EVENT : enter_room ", socketRoom)
+        
         // 세션이 이미 이 방에 있는지 확인하고 이미 있다면 다시 join 안시킴
         if (sessionToRoom[sessionID] === socketRoom) {
             console.log(`Session ID: ${sessionID} is already in room ${socketRoom}, ignoring.`);
@@ -282,12 +294,12 @@ io.on('connection', async function (socket) {
         }
 
         // api 서버에서 받은 채팅방이름으로 소켓룸을 만듦
-        socket.join(socketRoom);
+        
         sessionToRoom[sessionID] = socketRoom; //여긴 향후에 여러채팅방 접속했을때 문제생길수도 push 가 나을듯
         console.log(`Session ID: ${sessionID} entered room ${socketRoom}`);
 
         console.log('socket 서버에도 채팅방 입장(or 개설) ', socketRoom);
-        console.log('socket 서버에도 채팅방 목록 ', socket.rooms);
+        console.log('socket 서버에도 채팅방 목록 ', publicRooms());
 
         const enterMsg = `${socketToMember[socket.id]} 가 ${socketRoom} 에 입장했습니다.`
 
@@ -298,70 +310,6 @@ io.on('connection', async function (socket) {
         console.log(Message)
 
         socket.to(socketRoom).emit("notice_msg", Message)
-        
-        // 소켓룸 이름을 넣어서 참여중인 멤버들의 실제 'member Id' 를 반환
-        const memberIds = getRoomMembersID(socketRoom)
-        done(memberIds)
-
-        // 방 입장하면 기존 소켓들에게 알려 실시간 접속자 업데이트되게끔
-        socket.to(socketRoom).emit("enter_room_notice", memberIds);
-
-
-        // (temporarily deprecated) search current chatroom from api server
-        /*
-        axios.get('http://localhost:8080/chatroom/getMyChatrooms?memberId=24241')
-        .then(response => {
- 
-            // 받아온 채팅방 목록에서 선택한 채팅방이 있는지 확인
-            const chatrooms = response.data;
-
-            // 서버에 존재하는 채팅룸들
-            console.log("--- mySQL 저장된 채팅룸 목록---")
-            chatrooms.forEach(room=>console.log(room.chatroomName));
-            console.log("-----------------------------")
-
-            const existingRoom = chatrooms.find(room => {
-                if(room.chatroomName === roomName)
-                    return room.chatroomName;
-            })
-            console.log(existingRoom);
-
-            // 채팅방이 존재하면 입장
-            if(existingRoom){
-                socket.join(existingRoom.chatroomName);
-
-                const enterMsg = `${socket.id} 가 ${existingRoom.chatroomName} 에 입장했습니다.`
-
-                const Message = {
-                    type : 'notice', //css로 내가 보냈는지 남이 보냈는지 별도로 표기
-                    text : enterMsg
-                }
-
-                socket.to(existingRoom.chatroomName).emit("enter_msg", Message)
-                console.log(Message)
-                
-                const socketData ={
-                    'current_socket.id' : socket.id,
-                    existingRoom : existingRoom,
-                    // show entire chat room member and number
-                    roomInfo : {
-                        personnel: socket.adapter.rooms.get(existingRoom.chatroomName).size, 
-                        members: Array.from(socket.adapter.rooms.get(existingRoom.chatroomName)),
-                        sids: Array.from(socket.adapter.sids)
-                    },
-                    publicRooms : publicRooms()
-                }
-                done(socketData)
-
-            } else {
-                // 채팅방이 존재하지 않으면 에러 처리
-                console.error(`Room {${roomName}} does not exist.`);
-            }
-        })
-        .catch(error => {
-            console.error('There was an error fetching the chat rooms!', error);
-        });
-        */
     })
 
     // quit chat Room and send notice msg
