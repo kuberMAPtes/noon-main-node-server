@@ -523,10 +523,11 @@ app.post('/node/messageUnreadAndActiverooms', async function(req,res){
         await redisClient.get('activeRooms', (err, data) => {
             if (err) throw err;
         
-            activeRooms = JSON.parse(data);
+            activeRooms = JSON.parse(data) || [];
 
             const response = {chatrooms:chatrooms, activeRooms: activeRooms}
             res.json(response);
+            console.log("클라에 넘겨주는 fetchUnreadMsgCountAndActiverooms 리스폰스", response)
         });
 
     } catch (error) {
